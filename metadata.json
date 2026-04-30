@@ -1,0 +1,8 @@
+{
+  "name": "Signal Desk Setup",
+  "description": "An immersive, 3D-styled, scroll-driven web experience for an AI agent business helpdesk service.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": []
+}
