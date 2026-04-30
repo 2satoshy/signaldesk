@@ -7,6 +7,16 @@ import { LaptopMockup } from './LaptopMockup';
 import { TabletMockup } from './TabletMockup';
 import { AiOrb } from './AiOrb';
 
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+
+const chartData = [
+  { time: '08:00', calls: 2, bookings: 0 },
+  { time: '10:00', calls: 5, bookings: 1 },
+  { time: '12:00', calls: 12, bookings: 4 },
+  { time: '14:00', calls: 8, bookings: 2 },
+  { time: '16:00', calls: 14, bookings: 6 },
+];
+
 export function StoryContainer() {
     const containerRef = useRef<HTMLDivElement>(null);
     const { scrollYProgress } = useScroll({
@@ -312,16 +322,32 @@ export function StoryContainer() {
                                         </div>
                                     ))}
                                 </div>
-                                <div className="flex-1 bg-[#151921]/20 border border-slate-800/30 rounded-xl p-4 space-y-3">
-                                    {[1,2,3].map(i => (
-                                        <div key={i} className="flex justify-between items-center p-3 hover:bg-[#151921] rounded-lg">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-slate-800" />
-                                                <span className="text-sm font-medium">Verified Lead</span>
-                                            </div>
-                                            <span className="text-[10px] uppercase tracking-widest px-2 py-1 bg-blue-500/10 text-blue-400 rounded-sm">Qualified</span>
-                                        </div>
-                                    ))}
+                                <div className="flex-1 bg-[#151921]/20 border border-slate-800/30 rounded-xl p-4 overflow-hidden relative">
+                                    <h3 className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-4">Volume Overview</h3>
+                                    <div className="absolute inset-x-4 top-10 bottom-4">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={chartData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
+                                                <defs>
+                                                    <linearGradient id="colorCalls" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                                                    </linearGradient>
+                                                    <linearGradient id="colorBookings" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                                    </linearGradient>
+                                                </defs>
+                                                <XAxis dataKey="time" hide />
+                                                <YAxis hide />
+                                                <Tooltip
+                                                    contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #1e293b', borderRadius: '8px', color: '#cbd5e1', fontSize: '12px' }}
+                                                    itemStyle={{ color: '#fff' }}
+                                                />
+                                                <Area type="monotone" dataKey="calls" name="Calls" stroke="#3b82f6" fillOpacity={1} fill="url(#colorCalls)" strokeWidth={2} />
+                                                <Area type="monotone" dataKey="bookings" name="Bookings" stroke="#10b981" fillOpacity={1} fill="url(#colorBookings)" strokeWidth={2} />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
                                 </div>
                              </motion.div>
 

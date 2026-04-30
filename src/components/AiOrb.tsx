@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bot, X, Mic, MicOff, Loader2 } from 'lucide-react';
+import { Bot, X, Mic, MicOff, Loader2, CheckCircle2 } from 'lucide-react';
 import { GoogleGenAI, LiveServerMessage, Modality, Type } from '@google/genai';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
@@ -9,7 +9,8 @@ export function AiOrb() {
   const [isOpen, setIsOpen] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [messages, setMessages] = useState<{ id: string; role: 'system' | 'user' | 'agent'; text: string }[]>([
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [messages, setMessages] = useState<{ id: string; role: 'system' | 'user' | 'agent' | 'action'; text: string }[]>([
     {
       id: 'welcome',
       role: 'agent',
@@ -46,6 +47,7 @@ export function AiOrb() {
   const disconnectVoice = () => {
     setIsConnecting(false);
     setIsConnected(false);
+    setIsSpeaking(false);
     if (sessionRef.current) {
         sessionRef.current.then((s: any) => {
             if (s.close) s.close();
@@ -81,7 +83,7 @@ export function AiOrb() {
         config: {
           responseModalities: [Modality.AUDIO],
           systemInstruction:
-            "You are Bella, a helpful, enthusiastic, and professional voice customer service agent for Signal Desk. Signal Desk provides AI receptionists for businesses in South Africa. You can explain features, pricing, and schedule appointments/guided demos for the user. Speak naturally and conversationally. Do not output markdown, just natural text.",
+            "You are Bella, an AI receptionist for Signal Desk. You can explain features, pricing, schedule appointments, check/manage calendar, send emails, and make calls for the user. Speak naturally and conversationally. Do not output markdown, just natural text.",
           tools: [
             {
               functionDeclarations: [
@@ -97,6 +99,54 @@ export function AiOrb() {
                     required: ['time', 'name'],
                   },
                 },
+                {
+                  name: 'sendEmail',
+                  description: 'Send an email to a user or contact',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      recipient: { type: Type.STRING, description: 'Email address of the recipient' },
+                      subject: { type: Type.STRING, description: "Subject of the email" },
+                      body: { type: Type.STRING, description: "Body text of the email" },
+                    },
+                    required: ['recipient', 'subject', 'body'],
+                  },
+                },
+                {
+                  name: 'makeCall',
+                  description: 'Initiate a phone call to a number',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      phoneNumber: { type: Type.STRING, description: 'Phone number to call' },
+                      purpose: { type: Type.STRING, description: 'Purpose of the call' },
+                    },
+                    required: ['phoneNumber'],
+                  },
+                },
+                {
+                  name: 'checkCalendar',
+                  description: 'Check calendar availability for a given date',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      date: { type: Type.STRING, description: 'Date to check availability' },
+                    },
+                    required: ['date'],
+                  },
+                },
+                {
+                  name: 'manageCalendar',
+                  description: 'Manage a specific calendar event (update or cancel)',
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      action: { type: Type.STRING, description: 'update or cancel' },
+                      eventTitle: { type: Type.STRING, description: 'Title of the event' },
+                    },
+                    required: ['action', 'eventTitle'],
+                  },
+                }
               ],
             },
           ],
@@ -169,6 +219,14 @@ export function AiOrb() {
               }
             }
 
+            // Handle speaking state
+            if (message.serverContent?.modelTurn) {
+              setIsSpeaking(true);
+            }
+            if (message.serverContent?.turnComplete) {
+              setIsSpeaking(false);
+            }
+
             // Handle Transcripts
             if (message.serverContent?.modelTurn?.parts) {
                message.serverContent.modelTurn.parts.forEach(p => {
@@ -189,25 +247,40 @@ export function AiOrb() {
 
             if (message.toolCall) {
               message.toolCall.functionCalls.forEach((fc) => {
+                let systemMessage = '';
                 if (fc.name === 'scheduleAppointment') {
-                  const appointmentDetails = `Scheduled demo for ${fc.args?.name || 'Guest'} at ${fc.args?.time}`;
+                  systemMessage = `Scheduled demo for ${fc.args?.name || 'Guest'} at ${fc.args?.time}`;
+                } else if (fc.name === 'sendEmail') {
+                  systemMessage = `Sent email to ${fc.args?.recipient} with subject "${fc.args?.subject}"`;
+                } else if (fc.name === 'makeCall') {
+                  systemMessage = `Initiating call to ${fc.args?.phoneNumber}...`;
+                } else if (fc.name === 'checkCalendar') {
+                  systemMessage = `Checked calendar for ${fc.args?.date}. Found 3 available slots: 9am, 11am, 3pm.`;
+                } else if (fc.name === 'manageCalendar') {
+                  systemMessage = `Event "${fc.args?.eventTitle}" has been ${fc.args?.action}d.`;
+                }
+
+                if (systemMessage) {
                   setMessages((prev) => [
                     ...prev,
-                    { id: Date.now().toString(), role: 'system', text: appointmentDetails },
+                    { id: Date.now().toString() + Math.random(), role: 'action', text: systemMessage },
                   ]);
-
-                  sessionPromise.then((s) =>
-                    s.sendToolResponse({
-                      functionResponses: [
-                        {
-                          id: fc.id,
-                          name: fc.name,
-                          response: { success: true },
-                        },
-                      ],
-                    })
-                  );
                 }
+
+                sessionPromise.then((s) =>
+                  s.sendToolResponse({
+                    functionResponses: [
+                      {
+                        id: fc.id,
+                        name: fc.name,
+                        response: { 
+                          success: true,
+                          result: systemMessage || 'Action completed successfully'
+                        },
+                      },
+                    ],
+                  })
+                );
               });
             }
           },
@@ -275,12 +348,34 @@ export function AiOrb() {
                       ? 'bg-slate-800/40 text-slate-300 self-start'
                       : m.role === 'user'
                       ? 'bg-blue-600 border border-blue-500 text-white self-end'
+                      : m.role === 'action'
+                      ? 'bg-green-500/10 border border-green-500/20 text-green-400 self-start flex items-start gap-2 text-xs font-semibold'
                       : 'bg-transparent text-slate-500 self-center text-center text-[11px] uppercase tracking-widest'
                   }`}
                 >
+                  {m.role === 'action' && <CheckCircle2 size={14} className="mt-0.5 shrink-0" />}
                   {m.text}
                 </div>
               ))}
+              {isSpeaking && (
+                <div className="bg-slate-800/40 p-3 rounded-lg self-start max-w-[85%] flex items-center gap-1.5 min-h-[44px]">
+                  <motion.div
+                    animate={{ scale: [1, 1.2, 1], opacity: [0.4, 1, 0.4] }}
+                    transition={{ repeat: Infinity, duration: 1, delay: 0 }}
+                    className="w-1.5 h-1.5 bg-slate-400 rounded-full"
+                  />
+                  <motion.div
+                    animate={{ scale: [1, 1.2, 1], opacity: [0.4, 1, 0.4] }}
+                    transition={{ repeat: Infinity, duration: 1, delay: 0.2 }}
+                    className="w-1.5 h-1.5 bg-slate-400 rounded-full"
+                  />
+                  <motion.div
+                    animate={{ scale: [1, 1.2, 1], opacity: [0.4, 1, 0.4] }}
+                    transition={{ repeat: Infinity, duration: 1, delay: 0.4 }}
+                    className="w-1.5 h-1.5 bg-slate-400 rounded-full"
+                  />
+                </div>
+              )}
               <div ref={messagesEndRef} />
             </div>
 
@@ -314,22 +409,48 @@ export function AiOrb() {
         )}
       </AnimatePresence>
 
-      <motion.button
-        onClick={() => setIsOpen(!isOpen)}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        className="fixed bottom-6 right-6 w-16 h-16 bg-[#050810] backdrop-blur-md rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(59,130,246,0.15)] z-50 overflow-hidden group border border-blue-500/20"
+      <motion.div
+        animate={{
+          y: [0, -8, 0]
+        }}
+        transition={{
+          duration: 4,
+          repeat: Infinity,
+          ease: "easeInOut"
+        }}
+        className="fixed bottom-6 right-6 z-50"
       >
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
-          className={`absolute inset-[-50%] ${isConnected ? 'bg-[conic-gradient(from_0deg,transparent_0_340deg,#3b82f6_360deg)] opacity-40' : 'bg-[conic-gradient(from_0deg,transparent_0_340deg,#334155_360deg)] opacity-20'}`}
-        />
-        <div className="absolute inset-1 rounded-full bg-gradient-to-tr from-blue-900 via-slate-900 to-[#0A0A0A] z-10 flex items-center justify-center overflow-hidden">
-          <div className={`absolute w-[200%] h-[200%] bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.2)_0%,transparent_50%)] ${isConnected ? 'animate-pulse' : 'opacity-0'}`} />
-          <Bot className="text-white relative z-20" size={24} />
-        </div>
-      </motion.button>
+        <motion.button
+          onClick={() => setIsOpen(!isOpen)}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          animate={{
+            boxShadow: isConnected
+              ? [
+                  '0px 0px 30px rgba(59, 130, 246, 0.2)',
+                  '0px 0px 60px rgba(59, 130, 246, 0.5)',
+                  '0px 0px 30px rgba(59, 130, 246, 0.2)',
+                ]
+              : [
+                  '0px 0px 20px rgba(100, 116, 139, 0.1)',
+                  '0px 0px 40px rgba(100, 116, 139, 0.25)',
+                  '0px 0px 20px rgba(100, 116, 139, 0.1)',
+                ],
+          }}
+          transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+          className="relative w-16 h-16 bg-[#050810] backdrop-blur-md rounded-full flex items-center justify-center overflow-hidden group border border-blue-500/20"
+        >
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
+            className={`absolute inset-[-50%] ${isConnected ? 'bg-[conic-gradient(from_0deg,transparent_0_340deg,#3b82f6_360deg)] opacity-50' : 'bg-[conic-gradient(from_0deg,transparent_0_340deg,#334155_360deg)] opacity-30'}`}
+          />
+          <div className="absolute inset-1 rounded-full bg-gradient-to-tr from-blue-900 via-slate-900 to-[#0A0A0A] z-10 flex items-center justify-center overflow-hidden">
+            <div className={`absolute w-[200%] h-[200%] bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.3)_0%,transparent_50%)] ${isConnected ? 'animate-pulse' : 'opacity-0'}`} />
+            <Bot className="text-white relative z-20" size={24} />
+          </div>
+        </motion.button>
+      </motion.div>
     </>
   );
 }
