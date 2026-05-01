@@ -5,7 +5,7 @@ import { ScrollText, ScrollSideText } from './ScrollText';
 import { PhoneMockup, Message, WhatsappHeader } from './PhoneMockup';
 import { LaptopMockup } from './LaptopMockup';
 import { TabletMockup } from './TabletMockup';
-import { AiOrb } from './AiOrb';
+import { ChevronDown } from 'lucide-react';
 
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -188,10 +188,20 @@ export function StoryContainer() {
     return (
         <div ref={containerRef} className="relative w-full bg-[#050810] text-slate-200" style={{ height: "1500vh" }}>
             <ParticleField scrollYProgress={scrollYProgress} />
-            <AiOrb />
 
             <div className="sticky top-0 w-full h-screen overflow-hidden flex items-center justify-center perspective-1000">
                 
+                {/* Scroll Indicator */}
+                <motion.div 
+                    style={{ opacity: useTransform(scrollYProgress, [0, 0.02], [1, 0]) }}
+                    className="absolute bottom-10 left-1/2 transform -translate-x-1/2 flex flex-col items-center z-50 text-slate-400"
+                >
+                    <span className="text-[10px] tracking-widest uppercase mb-2 font-mono">Scroll</span>
+                    <div className="animate-bounce">
+                        <ChevronDown size={20} />
+                    </div>
+                </motion.div>
+
                 {/* 0% to 4% - Opening */}
                 <ScrollText scrollYProgress={scrollYProgress} range={[0, 0, 0.015, 0.02]} className="font-serif">
                     <h2 className="text-4xl italic text-slate-400 tracking-wide z-50">"That was a client."</h2>
